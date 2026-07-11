@@ -37,23 +37,23 @@ Supabase is a widely used "backend as a service": a company that hosts a Postgre
 
 ## Information governance (UK GDPR & the club)
 
-> This section is practical guidance from the project, not legal advice. The right people to sign this off are your club's committee/welfare officer, who will be following the FA's data protection and safeguarding guidance for grassroots clubs.
+> This section is practical guidance from the project, not legal advice.
 
-Even a small stats app processes **personal data of children** (names linked to performance), so it deserves the care you're giving it. The v1 design keeps the data footprint deliberately tiny, and here is how the responsibilities line up:
+Even a small stats app processes **personal data of children** (names linked to performance). The v1 design keeps the data footprint deliberately tiny, and here is how the responsibilities line up:
 
-**Roles.** Under UK GDPR, whoever decides to run this app for the team (you, or formally the club) is the **data controller**. Supabase is a **data processor** acting on your instructions, under its published DPA. GitHub Pages only serves the app's code and holds no team data.
+**Roles.** Under UK GDPR, whoever decides to run this app for the team is the **data controller**. Supabase is a **data processor** acting on your instructions, under its published DPA. GitHub Pages only serves the app's code and holds no team data.
 
 **What data exists, and what doesn't.** The database holds: player first names/initials and shirt numbers, match events (who did what, in which minute), opposition team names, the first name of the recording parent, and parents' pre-match predictions (scores and minutes, under their first name). It holds no dates of birth, no addresses, no contact details, no photos, and no accounts. Parents' own names live only in their phone's local storage plus next to their entries.
 
-**Data minimisation (build habit, not just policy).** Use first names or initials only — the app reminds you on the Squad screen. Stats about a 9-year-old's tackles tied to "Alfie B" is a much smaller matter than a full name, and works just as well on the touchline.
+**Data minimisation.** Use first names or initials only — the app reminds you on the Squad screen. Stats about a 9-year-old's tackles tied to "Alfie B" is a much smaller matter than a full name, and works just as well on the touchline.
 
-**Lawful basis and consent.** The clean approach for a kids' team: tell all parents what's being recorded and where it's stored, and get their agreement before adding their child — a short message in the team group and a note at sign-up is the usual grassroots pattern. If any parent objects, don't add that child (the app works fine with a partial squad). Your club welfare officer may want this folded into the club's existing consent forms.
+**Lawful basis and consent.** The clean approach for a kids' team: tell all parents what's being recorded and where it's stored, and get their agreement before adding their child — a short message in the team group and a note at sign-up is the usual grassroots pattern. If any parent objects, don't add that child (the app works fine with a partial squad).
 
 **Individual rights.** Erasure and access are simple at this scale: the dashboard's table editor lets you view, export (CSV), or delete anything in seconds. If a parent asks for their child's data to be removed, delete the player and their events — done same day.
 
 **Retention.** Decide up front how long stats live — e.g. delete the project (one click, everything gone) at the end of each season, or when the cohort moves on. Write the chosen period into your note to parents.
 
-**Access reality (the honest bit).** v1 has no logins in the app itself: anyone who has the web link can read and write the team's data. That is a deliberate trade-off for zero-friction pitch-side use, and it is the single most important thing to explain to the club. Mitigations: share the link only within the parents' group, use first names/initials, and know that the worst case if the link leaks is disclosure of first names + football stats, not contact or identity data. If the link ever leaks or you get junk data: change `VITE_TEAM_ID`, redeploy, and re-enter the squad. Adding a team passcode or proper Supabase Auth login is the top roadmap item and a good first contribution.
+**Access reality.** v1 has no logins in the app itself: anyone who has the web link can read and write the team's data. That is a deliberate trade-off for zero-friction pitch-side use, and it is the single most important thing to explain to the club. Mitigations: share the link only within the parents' group, use first names/initials, and know that the worst case if the link leaks is disclosure of first names + football stats, not contact or identity data. If the link ever leaks or you get junk data: change `VITE_TEAM_ID`, redeploy, and re-enter the squad. Adding a team passcode or proper Supabase Auth login is the top roadmap item and a good first contribution.
 
 **A one-page checklist to take to the club:**
 1. Named person responsible (controller): ______
