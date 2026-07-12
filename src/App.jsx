@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { sGet, sSet, sList, pGet, pSet, configured } from "./storage.js";
+import { sGet, sSet, sList, pGet, pSet, configured, hasPass, setTeamPass, clearTeamPass, checkPass } from "./storage.js";
 
 // ————————————————————————————————————————————————
 // MATCHDAY — grassroots stat tracker, v1
@@ -199,6 +199,10 @@ export default function App() {
   const [pendingDupe, setPendingDupe] = useState(null);
   const [toast, setToast] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
+  const [passDraft, setPassDraft] = useState("");
+  const [unlocked, setUnlocked] = useState(false);
+  const [gateMsg, setGateMsg] = useState("");
+  const [gateBusy, setGateBusy] = useState(false);
   const [, setTick] = useState(0);
   const pollRef = useRef(null);
 
@@ -209,25 +213,71 @@ export default function App() {
     setTimeout(() => setToast(null), 1800);
   };
 
+  const loadShared = useCallback(async () => {
+    const [r, ms] = await Promise.all([sGet("roster"), sGet("matches")]);
+    if (r) setRoster(r);
+    if (ms) setMatches(ms);
+    const live = (ms || []).find((x) => x.status === "live");
+    if (live) {
+      setActiveId(live.id);
+      setEvents(await loadEvents(live.id));
+      setPreds(await loadPredictions(live.id));
+      setScreen("live");
+    }
+  }, []);
+
   useEffect(() => {
     if (!configured) {
       setBooted(true);
       return;
     }
     (async () => {
-      const [r, ms] = await Promise.all([sGet("roster"), sGet("matches")]);
-      if (r) setRoster(r);
-      if (ms) setMatches(ms);
-      const live = (ms || []).find((x) => x.status === "live");
-      if (live) {
-        setActiveId(live.id);
-        setEvents(await loadEvents(live.id));
-        setPreds(await loadPredictions(live.id));
-        setScreen("live");
+      if (!hasPass()) {
+        setBooted(true);
+        return; // passcode gate will show
+      }
+      const ok = await checkPass();
+      if (ok === true) {
+        setUnlocked(true);
+        await loadShared();
+      } else if (ok === false) {
+        clearTeamPass();
+        setGateMsg("The team passcode has changed — enter the new one from the group chat.");
+      } else {
+        setGateMsg(
+          "Couldn't reach the database to check the passcode — check your signal and reload."
+        );
       }
       setBooted(true);
     })();
-  }, []);
+  }, [loadShared]);
+
+  async function submitGate() {
+    if (!me && !nameDraft.trim()) {
+      setGateMsg("Pop your name in too — it's shown next to what you record.");
+      return;
+    }
+    if (!passDraft.trim()) {
+      setGateMsg("Enter the team passcode from the group chat.");
+      return;
+    }
+    setGateBusy(true);
+    setGateMsg("");
+    setTeamPass(passDraft);
+    const ok = await checkPass();
+    if (ok === true) {
+      if (!me) saveMe(nameDraft);
+      setUnlocked(true);
+      await loadShared();
+    } else if (ok === false) {
+      clearTeamPass();
+      setGateMsg("That's not the team passcode — check the group chat and try again.");
+    } else {
+      clearTeamPass();
+      setGateMsg("Couldn't reach the database — check your signal and try again.");
+    }
+    setGateBusy(false);
+  }
 
   useEffect(() => {
     const t = setInterval(() => setTick((x) => x + 1), 1000);
@@ -376,26 +426,52 @@ export default function App() {
       </Shell>
     );
 
-  if (!me)
+  if (!unlocked || !me)
     return (
       <Shell>
         <div style={{ padding: "48px 24px" }}>
           <Display>Matchday</Display>
-          <p style={{ color: C.chalkDim, lineHeight: 1.5, margin: "12px 0 28px" }}>
+          <p style={{ color: C.chalkDim, lineHeight: 1.5, margin: "12px 0 20px" }}>
             One shared page for the whole touchline: a live score and feed wherever you're
             standing, pre-match predictions settled properly at full time, an automatic report for
             the coaches, and a season record — so next time we meet a team, we know how it went
-            last time. Everyone shares one roster and match record; anything you enter is visible
-            to the other parents. You don't have to record anything — plenty of parents just
-            watch.
+            last time. You don't have to record anything — plenty of parents just watch.
           </p>
-          <Eyebrow>Your name (shown next to what you record)</Eyebrow>
-          <Field value={nameDraft} onChange={setNameDraft} placeholder="e.g. Dave H" />
+          <p style={{ color: C.chalkDim, lineHeight: 1.5, margin: "0 0 28px", fontSize: 14 }}>
+            🔐 Team-only: everything is locked behind our passcode, so the kids' names and our
+            scores stay inside the parents' group.
+          </p>
+          {!me && (
+            <>
+              <Eyebrow>Your name (shown next to what you record)</Eyebrow>
+              <Field value={nameDraft} onChange={setNameDraft} placeholder="e.g. Dave H" />
+              <div style={{ height: 14 }} />
+            </>
+          )}
+          {me && (
+            <p style={{ color: C.chalkDim, fontSize: 14, margin: "0 0 10px" }}>
+              Recording as <b style={{ color: C.chalk }}>{me.name}</b>
+            </p>
+          )}
+          <Eyebrow>Team passcode (it's in the group chat)</Eyebrow>
+          <Field
+            value={passDraft}
+            onChange={setPassDraft}
+            placeholder="e.g. orange-whistle-42"
+            autoCapitalize="none"
+            autoCorrect="off"
+          />
+          {gateMsg && (
+            <p style={{ color: C.hivis, fontSize: 14, margin: "10px 0 0" }}>{gateMsg}</p>
+          )}
           <div style={{ marginTop: 16 }}>
-            <Btn onClick={() => nameDraft.trim() && saveMe(nameDraft)} style={{ width: "100%" }}>
-              Start
+            <Btn onClick={submitGate} disabled={gateBusy} style={{ width: "100%" }}>
+              {gateBusy ? "Checking…" : "Unlock"}
             </Btn>
           </div>
+          <p style={{ color: C.chalkDim, fontSize: 12, marginTop: 14 }}>
+            You'll only be asked once on this device.
+          </p>
         </div>
       </Shell>
     );

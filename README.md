@@ -15,6 +15,7 @@ Several parents open the same web link during a match and record events in paral
 **Field-tested details:**
 - **Duplicate guard.** If another parent logged the same action for the same player within the last 90 seconds, the app asks "probably the same one?" before adding — the classic two-parents-log-one-goal mistake gets caught at the moment it happens, not discovered at half time.
 - **Clock nudges.** Banners remind whoever's holding a phone to tap Kick off at the whistle and Start 2nd half at the restart, and the save toast flags any event recorded without a match minute.
+- **Team passcode.** The app asks each parent for the team passcode once; the database rejects any request without it, so the link alone reveals nothing.
 - **Squad order, not a leaderboard.** Player tables display in shirt-number order, never sorted by goals. The stats are all there for the coach, without publicly ranking 9-year-olds in front of the parent group.
 
 **Match-day tips:** it works fine with everyone recording everything (the duplicate guard has your back), but the smoothest pattern is a loose split — e.g. one parent owns goals/assists, another tackles/saves. And whoever taps Kick off should stand near the ref's whistle, not the tea urn.
@@ -31,7 +32,7 @@ Several parents open the same web link during a match and record events in paral
 Supabase is a widely used "backend as a service": a company that hosts a Postgres database for you (on AWS infrastructure) with a web dashboard and an API. It plays the same role Firebase (Google) plays for many apps. Points that matter for governance:
 
 - **You get a separate, secure admin login.** The Supabase account (dashboard) is completely separate from the parents' app. You sign in at supabase.com with an email + password (or GitHub SSO), and you can — and should — enable two-factor authentication under Account → Security. Only the account holder can see the dashboard, run SQL, change access policies, export data, or delete the project. Parents never log into Supabase; they only ever see the app.
-- **The app talks to the database with a limited "anon" key**, which can only do what the access policies in [`supabase/schema.sql`](supabase/schema.sql) permit — read/write the one `kv` table. It cannot administer the project.
+- **The app talks to the database with a limited "anon" key**, which can only do what the access policies in [`supabase/schema.sql`](supabase/schema.sql) permit — and those policies refuse every read and write unless the request carries the correct team passcode. It cannot administer the project.
 - **Data location is your choice.** When you create the project you pick the hosting region. **Pick "West Europe (London) — eu-west-2"** so the data stays in the UK (see setup step 1). A project's region is fixed at creation, so choose it correctly the first time.
 - **Security posture:** Supabase is SOC 2 Type II audited and ISO 27001 certified, encrypts data at rest (AES-256) and in transit (TLS), and publishes a GDPR Data Processing Agreement (DPA) covering its role as a data processor. Their security page is at [supabase.com/security](https://supabase.com/security) and legal documents at [supabase.com/legal/dpa](https://supabase.com/legal/dpa).
 
@@ -53,13 +54,13 @@ Even a small stats app processes **personal data of children** (names linked to 
 
 **Retention.** Decide up front how long stats live — e.g. delete the project (one click, everything gone) at the end of each season, or when the cohort moves on. Write the chosen period into your note to parents.
 
-**Access reality (the honest bit).** v1 has no logins in the app itself: anyone who has the web link can read and write the team's data. That is a deliberate trade-off for zero-friction pitch-side use, and it is the single most important thing to explain to the club. Mitigations: share the link only within the parents' group, use first names/initials, and know that the worst case if the link leaks is disclosure of first names + football stats, not contact or identity data. If the link ever leaks or you get junk data: change `VITE_TEAM_ID`, redeploy, and re-enter the squad. Adding a team passcode or proper Supabase Auth login is the top roadmap item and a good first contribution.
+**Access control 🔐.** The team's data is protected by a **team passcode, enforced by the database itself** — every request from the app carries the passcode as a header, and the database's row-level-security policies reject anything without the correct code. The passcode never appears in this repo or in the deployed site; it lives in the database (set by you in `schema.sql`) and in each parent's device after they enter it once. So a stranger who finds the repo or the web link sees a locked screen and gets nothing from the database — which also satisfies league rules against sharing scores outside the parent group. Honest limits: it's a *shared* secret, so its strength is the phrase you pick (three words with a number, e.g. `orange-whistle-42` — not `pass123`) and the discipline of keeping it in the group. If it ever leaks, rotation takes one minute: re-run the `team_pass_ok` function in the SQL editor with a new phrase, and every parent's app automatically prompts for the new code. For per-person accounts with individual revocation, Supabase Auth remains the v2 upgrade path.
 
 **A one-page checklist to take to the club:**
 1. Named person responsible (controller): ______
 2. Data recorded: first names/initials, shirt numbers, match events, match minutes. Nothing else.
 3. Where stored: Supabase (London region, UK), encrypted, under Supabase's GDPR DPA.
-4. Who can access: parents with the link (read/write in-app); dashboard admin only via the 2FA-protected Supabase account.
+4. Who can access: only people with the team passcode (enforced by the database, not just the app); dashboard admin only via the 2FA-protected Supabase account. Passcode rotated in one minute if it leaks.
 5. Consent: all parents informed and agreed before their child is added.
 6. Retention: deleted at ______ (e.g. end of season).
 7. Erasure requests: actioned via dashboard, same day.
@@ -70,7 +71,7 @@ Even a small stats app processes **personal data of children** (names linked to 
 
 1. Create a free account at [supabase.com](https://supabase.com). Immediately enable two-factor authentication (Account → Security).
 2. Create a **New project** — and at this step set **Region: West Europe (London) / eu-west-2** so data stays in the UK. (Region can't be changed later without migrating.)
-3. In the project dashboard, open **SQL Editor → New query**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql), and click **Run**.
+3. Open [`supabase/schema.sql`](supabase/schema.sql), **change `CHANGE-ME` to your team passcode** (three words + a number, letters/numbers/dashes only). Then in the project dashboard open **SQL Editor → New query**, paste the edited file, and click **Run**. (Already deployed without a passcode? Run [`supabase/upgrade-passcode.sql`](supabase/upgrade-passcode.sql) instead.)
 4. Go to **Project Settings → API** and copy two values:
    - **Project URL** (looks like `https://abcdefgh.supabase.co`)
    - **anon public** key (a long string)
@@ -136,7 +137,7 @@ npm run dev
 
 ## Roadmap ideas (PRs welcome)
 
-- **Team passcode or Supabase Auth login** (top priority — closes the open-link trade-off above)
+- Supabase Auth logins (per-person accounts with individual revocation, replacing the shared passcode)
 - Substitutions and minutes played
 - Editable event minutes (for the goal you logged 30 seconds late)
 - Attempted vs completed tackles

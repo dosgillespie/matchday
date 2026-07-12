@@ -2,13 +2,16 @@
 // ————————————————————————————————————————————————
 // Storage adapter.
 //
-// Shared team data (roster, matches, events) lives in one
-// Supabase table shaped as a key/value store. Personal data
-// (your recorder name/id) lives in this device's localStorage.
+// Shared team data (roster, matches, events, predictions) lives in one
+// Supabase table shaped as a key/value store, protected by a team
+// passcode: the app sends the passcode as a header with every request,
+// and the database's row-level-security policies reject anything without
+// the correct code. The passcode itself lives only in the database
+// (see supabase/schema.sql) and in each parent's localStorage — never
+// in this repo or the built site.
 //
-// Everything the app knows about storage goes through this
-// file, so swapping the backend (Firebase, your own API, …)
-// only ever means editing storage.js.
+// Personal data (your recorder name/id, your copy of the passcode)
+// lives in this device's localStorage.
 // ————————————————————————————————————————————————
 
 import { createClient } from "@supabase/supabase-js";
@@ -19,11 +22,59 @@ const TEAM = import.meta.env.VITE_TEAM_ID || "default";
 
 export const configured = Boolean(url && anonKey);
 
-const supabase = configured ? createClient(url, anonKey) : null;
+const PASS_KEY = "matchday:teampass";
+
+function currentPass() {
+  try {
+    return localStorage.getItem(PASS_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+let supabase = null;
+function rebuildClient() {
+  supabase = configured
+    ? createClient(url, anonKey, {
+        global: { headers: { "x-matchday-pass": currentPass() } },
+      })
+    : null;
+}
+rebuildClient();
+
+export function hasPass() {
+  return currentPass().length > 0;
+}
+
+export function setTeamPass(pass) {
+  try {
+    localStorage.setItem(PASS_KEY, pass.trim());
+  } catch {
+    /* ignore */
+  }
+  rebuildClient();
+}
+
+export function clearTeamPass() {
+  try {
+    localStorage.removeItem(PASS_KEY);
+  } catch {
+    /* ignore */
+  }
+  rebuildClient();
+}
+
+// Returns true (correct), false (wrong), or null (couldn't reach the database).
+export async function checkPass() {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("check_pass");
+  if (error) return null;
+  return data === true;
+}
 
 const k = (key) => `${TEAM}:${key}`;
 
-// ——— shared (whole team sees this) ———
+// ——— shared (whole team sees this, passcode required) ———
 export async function sGet(key) {
   if (!supabase) return null;
   const { data, error } = await supabase
