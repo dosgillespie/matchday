@@ -23,6 +23,11 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: Fail loudly if secrets are missing
+        run: |
+          if [ -z "${{ secrets.VITE_SUPABASE_URL }}" ]; then echo "::error::VITE_SUPABASE_URL is empty or not found"; exit 1; fi
+          if [ -z "${{ secrets.VITE_SUPABASE_ANON_KEY }}" ]; then echo "::error::VITE_SUPABASE_ANON_KEY is empty or not found"; exit 1; fi
+          echo "Both secrets present ✅"          
       - run: npm ci
       - run: npm run build
         env:
