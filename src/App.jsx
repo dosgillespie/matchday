@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { sGet, sSet, sList, pGet, pSet, configured, hasPass, setTeamPass, clearTeamPass, checkPass } from "./storage.js";
+import { sGet, sSet, sList, sDel, pGet, pSet, configured, hasPass, setTeamPass, clearTeamPass, checkPass } from "./storage.js";
 
 // ————————————————————————————————————————————————
 // MATCHDAY — grassroots stat tracker, v1
@@ -197,6 +197,7 @@ export default function App() {
   const [preds, setPreds] = useState([]);
   const [sheet, setSheet] = useState(null);
   const [pendingDupe, setPendingDupe] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const [toast, setToast] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
   const [passDraft, setPassDraft] = useState("");
@@ -334,6 +335,26 @@ export default function App() {
     setPreds((prev) => [...prev.filter((p) => p.rid !== me.rid), rec].sort((a, b) => a.t - b.t));
     const ok = await sSet(`pred:${activeMatch.id}:${me.rid}`, rec);
     say(ok ? "Prediction locked in 🔮" : "Couldn't save — check connection");
+  }
+
+  async function deleteMatch(m) {
+    // Remove the match AND every stored bucket that belongs to it,
+    // so nothing is left orphaned in the database.
+    const [evtKeys, predKeys] = await Promise.all([
+      sList(`evt:${m.id}:`),
+      sList(`pred:${m.id}:`),
+    ]);
+    const results = await Promise.all([...evtKeys, ...predKeys].map((key) => sDel(key)));
+    const fresh = (await sGet("matches")) || matches;
+    const ok = await sSet("matches", fresh.filter((x) => x.id !== m.id));
+    setMatches(fresh.filter((x) => x.id !== m.id));
+    if (activeId === m.id) {
+      setActiveId(null);
+      setEvents([]);
+      setPreds([]);
+      setScreen("home");
+    }
+    say(ok && results.every(Boolean) ? "Match deleted" : "Some data may not have deleted — check connection");
   }
 
   async function record(type, pid, force = false) {
@@ -593,11 +614,59 @@ export default function App() {
         </div>
       )}
 
+      {pendingDelete && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            zIndex: 60,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: C.panelHi,
+              borderRadius: 18,
+              padding: 22,
+              maxWidth: 420,
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
+            <Display size={24}>Delete this match?</Display>
+            <p style={{ lineHeight: 1.5, margin: "12px 0 18px", fontSize: 15 }}>
+              vs <b>{pendingDelete.opp}</b> ({pendingDelete.date}) — this removes the match, all
+              its events and all predictions from the database, for everyone. It can't be undone.
+            </p>
+            <div style={{ display: "grid", gap: 8 }}>
+              <Btn kind="ghost" onClick={() => setPendingDelete(null)}>
+                Keep it
+              </Btn>
+              <Btn
+                kind="danger"
+                onClick={() => {
+                  const m = pendingDelete;
+                  setPendingDelete(null);
+                  deleteMatch(m);
+                }}
+              >
+                Delete permanently
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
       {screen === "roster" && <RosterScreen roster={roster} saveRoster={saveRoster} say={say} />}
 
       {screen === "home" && (
         <HomeScreen
           matches={matches}
+          onDelete={(m) => setPendingDelete(m)}
           onStart={async (opp, halfLen) => {
             if (roster.length === 0) {
               say("Add players to the squad first");
@@ -674,7 +743,7 @@ function RosterScreen({ roster, saveRoster, say }) {
       <Eyebrow>Shared squad list</Eyebrow>
       <Display size={32}>Squad</Display>
       <p style={{ color: C.chalkDim, fontSize: 13, margin: "10px 0 0" }}>
-        Tip: use first names or initials — this list is visible to everyone with the link.
+        Tip: use first names or initials. 🔐 Only people with the team passcode can see this list — but less is still best.
       </p>
       <div style={{ display: "flex", gap: 8, margin: "18px 0" }}>
         <div style={{ width: 72 }}>
@@ -738,7 +807,7 @@ function RosterScreen({ roster, saveRoster, say }) {
 }
 
 // ————————————————— home —————————————————
-function HomeScreen({ matches, onStart, onOpen }) {
+function HomeScreen({ matches, onStart, onOpen, onDelete }) {
   const [opp, setOpp] = useState("");
   const [halfLen, setHalfLen] = useState(25);
 
@@ -825,14 +894,14 @@ function HomeScreen({ matches, onStart, onOpen }) {
         <Eyebrow>Match record</Eyebrow>
         {matches.length === 0 && <p style={{ color: C.chalkDim }}>No matches yet.</p>}
         {matches.map((m) => (
-          <MatchRow key={m.id} m={m} onOpen={onOpen} />
+          <MatchRow key={m.id} m={m} onOpen={onOpen} onDelete={onDelete} />
         ))}
       </div>
     </div>
   );
 }
 
-function MatchRow({ m, onOpen }) {
+function MatchRow({ m, onOpen, onDelete }) {
   const [score, setScore] = useState(m.gf != null ? `${m.gf}–${m.ga}` : null);
   useEffect(() => {
     if (m.gf != null) return;
@@ -847,11 +916,13 @@ function MatchRow({ m, onOpen }) {
     };
   }, [m.id, m.gf]);
   return (
-    <button
+    <div
       onClick={() => onOpen(m)}
+      role="button"
       style={{
         display: "flex",
         width: "100%",
+        boxSizing: "border-box",
         alignItems: "center",
         gap: 12,
         background: C.panel,
@@ -880,7 +951,25 @@ function MatchRow({ m, onOpen }) {
       >
         {m.status === "live" ? "Live" : "FT"}
       </span>
-    </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(m);
+        }}
+        aria-label={`Delete match vs ${m.opp}`}
+        style={{
+          background: "none",
+          border: `1px solid ${C.line}`,
+          borderRadius: 10,
+          color: C.chalkDim,
+          cursor: "pointer",
+          fontSize: 15,
+          padding: "8px 10px",
+        }}
+      >
+        🗑
+      </button>
+    </div>
   );
 }
 

@@ -104,6 +104,12 @@ export async function sList(prefix) {
   return data.map((r) => r.key.slice(TEAM.length + 1));
 }
 
+export async function sDel(key) {
+  if (!supabase) return false;
+  const { error } = await supabase.from("kv").delete().eq("key", k(key));
+  return !error;
+}
+
 // ——— personal (this device only) ———
 export function pGet(key) {
   try {
