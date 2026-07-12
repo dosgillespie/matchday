@@ -198,6 +198,7 @@ export default function App() {
   const [sheet, setSheet] = useState(null);
   const [pendingDupe, setPendingDupe] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingRemove, setPendingRemove] = useState(null);
   const [toast, setToast] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
   const [passDraft, setPassDraft] = useState("");
@@ -355,6 +356,34 @@ export default function App() {
       setScreen("home");
     }
     say(ok && results.every(Boolean) ? "Match deleted" : "Some data may not have deleted — check connection");
+  }
+
+  async function removePlayer(p) {
+    // GDPR-style erasure: delete the name from the squad, then sweep every
+    // event bucket in every match and strip the link to this player.
+    // Goals stay in match totals (attributed to no one) so historical
+    // scores remain true; nothing identifying the child remains anywhere.
+    const freshRoster = (await sGet("roster")) || roster;
+    const nextRoster = freshRoster.filter((x) => x.id !== p.id);
+    let ok = await sSet("roster", nextRoster);
+    setRoster(nextRoster);
+    const ms = (await sGet("matches")) || matches;
+    for (const m of ms) {
+      const keys = await sList(`evt:${m.id}:`);
+      for (const key of keys) {
+        const bucket = (await sGet(key)) || [];
+        if (bucket.some((e) => e.pid === p.id)) {
+          const cleaned = bucket.map((e) => (e.pid === p.id ? { ...e, pid: null } : e));
+          ok = (await sSet(key, cleaned)) && ok;
+        }
+      }
+    }
+    if (activeId) setEvents(await loadEvents(activeId));
+    say(
+      ok
+        ? `${p.name} removed — name deleted, all records unlinked`
+        : "Some records may not have updated — check connection and try again"
+    );
   }
 
   async function record(type, pid, force = false) {
@@ -614,6 +643,54 @@ export default function App() {
         </div>
       )}
 
+      {pendingRemove && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.6)",
+            zIndex: 60,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: C.panelHi,
+              borderRadius: 18,
+              padding: 22,
+              maxWidth: 420,
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
+            <Display size={24}>Remove {pendingRemove.name}?</Display>
+            <p style={{ lineHeight: 1.5, margin: "12px 0 18px", fontSize: 15 }}>
+              This deletes their name from the squad and unlinks every recorded event from them
+              across the whole database — for everyone, permanently. Goals they scored stay in
+              match totals, attributed to no one, so past scores remain correct.
+            </p>
+            <div style={{ display: "grid", gap: 8 }}>
+              <Btn kind="ghost" onClick={() => setPendingRemove(null)}>
+                Keep them
+              </Btn>
+              <Btn
+                kind="danger"
+                onClick={() => {
+                  const p = pendingRemove;
+                  setPendingRemove(null);
+                  removePlayer(p);
+                }}
+              >
+                Remove permanently
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pendingDelete && (
         <div
           style={{
@@ -661,7 +738,14 @@ export default function App() {
         </div>
       )}
 
-      {screen === "roster" && <RosterScreen roster={roster} saveRoster={saveRoster} say={say} />}
+      {screen === "roster" && (
+        <RosterScreen
+          roster={roster}
+          saveRoster={saveRoster}
+          say={say}
+          onRemove={(p) => setPendingRemove(p)}
+        />
+      )}
 
       {screen === "home" && (
         <HomeScreen
@@ -735,7 +819,7 @@ export default function App() {
 }
 
 // ————————————————— roster —————————————————
-function RosterScreen({ roster, saveRoster, say }) {
+function RosterScreen({ roster, saveRoster, say, onRemove }) {
   const [name, setName] = useState("");
   const [num, setNum] = useState("");
   return (
@@ -789,7 +873,7 @@ function RosterScreen({ roster, saveRoster, say }) {
           </span>
           <span style={{ flex: 1, fontSize: 17 }}>{p.name}</span>
           <button
-            onClick={() => saveRoster(roster.filter((x) => x.id !== p.id))}
+            onClick={() => onRemove(p)}
             style={{
               background: "none",
               border: "none",
@@ -1163,7 +1247,7 @@ function LiveScreen(props) {
                   ) : (
                     <>
                       {meta ? meta.emoji : ""} {meta ? meta.label : e.type} —{" "}
-                      <b>{p ? p.name : "?"}</b>
+                      <b>{p ? p.name : "(removed)"}</b>
                     </>
                   )}
                   <span style={{ color: C.chalkDim, fontSize: 12 }}> · {e.by}</span>
@@ -1251,7 +1335,7 @@ function SummaryScreen({ match, roster, events, preds }) {
         const p = roster.find((x) => x.id === g.pid);
         return g.type === "opp_goal"
           ? `  ${g.min || "?"}' — ${match.opp}`
-          : `  ${g.min || "?"}' — ${p ? p.name : "?"}`;
+          : `  ${g.min || "?"}' — ${p ? p.name : "(removed)"}`;
       }),
       ``,
       `Player stats (G/A/Tackles/Saves):`,
@@ -1300,7 +1384,7 @@ function SummaryScreen({ match, roster, events, preds }) {
                 {g.min ? `${g.min}'` : "–"}
               </span>
               <span style={{ color: g.type === "opp_goal" ? C.danger : C.chalk }}>
-                ⚽ {g.type === "opp_goal" ? match.opp : p ? p.name : "?"}
+                ⚽ {g.type === "opp_goal" ? match.opp : p ? p.name : "(removed)"}
               </span>
             </div>
           );
