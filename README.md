@@ -48,7 +48,7 @@ Even a small stats app processes **personal data of children** (names linked to 
 
 **Data minimisation (build habit, not just policy).** Use first names or initials only — the app reminds you on the Squad screen. Stats about a 9-year-old's tackles tied to "Alfie B" is a much smaller matter than a full name, and works just as well on the touchline.
 
-**Lawful basis and consent.** The clean approach for a kids' team: tell all parents what's being recorded and where it's stored, and get their agreement before adding their child — a short message in the team group and a note at sign-up is the usual grassroots pattern. If any parent objects, don't add that child (the app works fine with a partial squad). Your club welfare officer may want this folded into the club's existing consent forms.
+**Lawful basis and consent.** The clean approach for a kids' team: tell all parents what's being recorded and where it's stored, and get their agreement before adding their child — a short message in the team group and a note at sign-up is the usual grassroots pattern. If any parent objects, don't add that child — and opting out costs the team nothing: the live screen has an "Our goal — unlisted" button, so a child who isn't on the app can still score and the match total stays accurate, with no personal data recorded. Your club welfare officer may want this folded into the club's existing consent forms.
 
 **Individual rights.** Erasure is built into the app itself: removing a player from the Squad tab (with confirmation) deletes their name and sweeps every match in the database, unlinking all of their recorded events — nothing identifying the child remains anywhere. Goals they scored stay in match totals attributed to no one, so historical scores remain true while the personal data is genuinely gone. Deleting a match likewise removes it and all of its events and predictions from the database permanently. For access/export requests, the dashboard's table editor provides CSV export in seconds. Either way: actionable same day.
 
@@ -127,7 +127,7 @@ npm run dev
 1. First visit: enter your name (stored only on your device; shown next to your entries).
 2. **Squad** tab: add the players once (first names or initials). Everyone shares this list.
 3. **Matches** tab: enter the opposition, pick the half length, **Start match**, then **Kick off** — from that moment every event gets an automatic match minute.
-4. Tap a player, tap the action (Goal / Assist / Tackle / Save). There's an **Opposition goal** button, and you can undo your own entries from the feed.
+4. Tap a player, tap the action (Goal / Assist / Tackle / Save). There's an **Opposition goal** button, an **Our goal — unlisted** button for a scorer who isn't on the squad list (counts in the score, attributed to no one), and you can undo your own entries from the feed.
 5. **Full time** produces the summary: score, goal timeline with minutes, per-player table, and a **Copy report for the coach** button.
 6. The **Season** tab aggregates W/D/L, goals for/against, and player totals across all matches.
 

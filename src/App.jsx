@@ -425,7 +425,7 @@ export default function App() {
       const base =
         type === "opp_goal"
           ? "Opposition goal recorded"
-          : `${ACTION_META[type].label} — ${p ? p.name : ""}`;
+          : `${ACTION_META[type].label} — ${p ? p.name : "unlisted player"}`;
       say(
         ev.min
           ? `${base}${type === "opp_goal" ? "" : `, ${ev.min}'`}`
@@ -670,7 +670,7 @@ export default function App() {
             <p style={{ lineHeight: 1.5, margin: "12px 0 18px", fontSize: 15 }}>
               This deletes their name from the squad and unlinks every recorded event from them
               across the whole database — for everyone, permanently. Goals they scored stay in
-              match totals, attributed to no one, so past scores remain correct.
+              match totals as "Unlisted player", so past scores remain correct.
             </p>
             <div style={{ display: "grid", gap: 8 }}>
               <Btn kind="ghost" onClick={() => setPendingRemove(null)}>
@@ -1187,11 +1187,17 @@ function LiveScreen(props) {
           })}
         </div>
 
-        <div style={{ marginTop: 12 }}>
-          <Btn kind="danger" style={{ width: "100%" }} onClick={() => record("opp_goal", null)}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+          <Btn kind="ghost" onClick={() => record("goal", null)}>
+            ⚽ Our goal — unlisted
+          </Btn>
+          <Btn kind="danger" onClick={() => record("opp_goal", null)}>
             Opposition goal
           </Btn>
         </div>
+        <p style={{ color: C.chalkDim, fontSize: 12, margin: "8px 2px 0" }}>
+          Unlisted = a scorer who isn't on the squad list. Counts in the score, named to no one.
+        </p>
 
         <div style={{ marginTop: 28 }}>
           <div style={{ display: "flex", alignItems: "center" }}>
@@ -1247,7 +1253,7 @@ function LiveScreen(props) {
                   ) : (
                     <>
                       {meta ? meta.emoji : ""} {meta ? meta.label : e.type} —{" "}
-                      <b>{p ? p.name : "(removed)"}</b>
+                      <b>{p ? p.name : "Unlisted player"}</b>
                     </>
                   )}
                   <span style={{ color: C.chalkDim, fontSize: 12 }}> · {e.by}</span>
@@ -1335,7 +1341,7 @@ function SummaryScreen({ match, roster, events, preds }) {
         const p = roster.find((x) => x.id === g.pid);
         return g.type === "opp_goal"
           ? `  ${g.min || "?"}' — ${match.opp}`
-          : `  ${g.min || "?"}' — ${p ? p.name : "(removed)"}`;
+          : `  ${g.min || "?"}' — ${p ? p.name : "Unlisted player"}`;
       }),
       ``,
       `Player stats (G/A/Tackles/Saves):`,
@@ -1384,7 +1390,7 @@ function SummaryScreen({ match, roster, events, preds }) {
                 {g.min ? `${g.min}'` : "–"}
               </span>
               <span style={{ color: g.type === "opp_goal" ? C.danger : C.chalk }}>
-                ⚽ {g.type === "opp_goal" ? match.opp : p ? p.name : "(removed)"}
+                ⚽ {g.type === "opp_goal" ? match.opp : p ? p.name : "Unlisted player"}
               </span>
             </div>
           );
